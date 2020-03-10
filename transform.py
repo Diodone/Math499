@@ -80,7 +80,7 @@ def threshold(values, epsilon, typeStr = "soft"):
                 output.append(soft_threshold(item, epsilon))
         elif typeStr.lower() == "hard":
             for item in values:
-                output.append(hard_threshold(values, epsilon))
+                output.append(hard_threshold(item, epsilon))
     return output
 
 def hard_threshold(values, epsilon):
@@ -108,11 +108,11 @@ def randomNull(data, percentRemain=1):
 def main():
     # Data length, deviation of gaussian noise, datasources, thresholding type, number of trials for each deviation
     data_length = 1024
-    std_devs = np.arange(0.125, 10,0.125)
+    std_devs = np.arange(0.125, 10, 0.125)
     datasources = ["Blocks", "Piece-Polynomial", "Piece-regular", "Ramp", "Doppler"]
     threshold_type = ["soft", "hard"]
     average_psnr = {"haar":{}, "haar2":{}, "bi1":{}, "bi1_2":{}, "bi2":{}, "bi2_2":{}}
-    numRandom = 200
+    numRandom = 1
     # Define wavelets
     haar = Wavelet(([1/2, 1/2], [-1/2, 1/2]), [0,0])
     bi1 = Wavelet(([-1/8, 1/4, 3/4, 1/4, -1/8], [-1/4, 1/2, -1/4]), [-2, 0])
@@ -125,6 +125,7 @@ def main():
         original_data = data.copy()
         plt.plot(original_data)
         plt.savefig("SourceData-"+source+".png")
+        plt.close()
         for std_dev in std_devs:
             for key in average_psnr.keys():
                 average_psnr[key][source][std_dev] = {}
@@ -137,6 +138,7 @@ def main():
                 added_noise=add_noise(data, std_dev)
                 plt.plot(added_noise)
                 plt.savefig("Noisy-"+source+"-"+str(std_dev)+"-"+str(i)+".png")
+                plt.close()
                 # Calculate forward transform for all wavelets, and 2 deep combinations (currently of same wavelet)
                 haar1 = haar.forward_periodic(added_noise)
                 haar2 = haar.forward_periodic(haar1[0])
@@ -145,56 +147,68 @@ def main():
                 bi2_1 = bi2.forward_periodic(added_noise)
                 bi2_2 = bi2.forward_periodic(bi2_1[0])
                 # Threshold
-                for thesh_index in range(len(thresholds)):
+                for thresh_index in range(len(thresholds)):
                     for t in threshold_type:
                         
                         # Technically, the transformed values is \sqrt(2)* the value received from forward. This doesn't change much as a constant multiple can continue though so long as it is kept track of, and indeed my backward takes the \sqrt(2) into account. Threshold values need to be adjusted though
-                        haar1_t = threshold(haar1, threshold/math.sqrt(2), t)
-                        haar2_t = threshold(haar2, threshold/2, t)
-                        bi1_1_t = threshold(bi1_1, threshold/math.sqrt(2), t)
-                        bi1_2_t = threshold(bi1_2, threshold/2, t)
-                        bi2_1_t = threshold(bi2_1, threshold/math.sqrt(2), t)
-                        bi2_2_t = threshold(bi2_2, threshold/2, t)
+                        haar1_t = threshold(haar1, thresholds[thresh_index]/math.sqrt(2), t)
+                        haar2_t = threshold(haar2, thresholds[thresh_index]/2, t)
+                        bi1_1_t = threshold(bi1_1, thresholds[thresh_index]/math.sqrt(2), t)
+                        bi1_2_t = threshold(bi1_2, thresholds[thresh_index]/2, t)
+                        bi2_1_t = threshold(bi2_1, thresholds[thresh_index]/math.sqrt(2), t)
+                        bi2_2_t = threshold(bi2_2, thresholds[thresh_index]/2, t)
                         # Reconstruct from the thresholded values
-                        haar2 = haar.backward_periodic(haar2_t, len(haar1[0])%2==1)
-                        bi1_2 = bi2.backward_periodic(bi1_2_t, len(bi1_1[0])%2==1)
-                        bi2_2 = bi1.backward_periodic(bi2_2_t, len(bi2_1[0])%2==1)
+                        haar4 = haar.backward_periodic(haar2_t, len(haar1[0])%2==1)
+                        bi1_4 = bi2.backward_periodic(bi1_2_t, len(bi1_1[0])%2==1)
+                        bi2_4 = bi1.backward_periodic(bi2_2_t, len(bi2_1[0])%2==1)
                         # Reverse depth 1
-                        haar = haar.backward_periodic(haar1_t, datalength%2==1)
-                        bi1 = bi2.backward_periodic(bi1_1_t, datalength%2==1)
-                        bi2 = bi1.backward_periodic(bi2_1_t, datalength%2==1)
+                        haar3 = haar.backward_periodic(haar1_t, data_length%2==1)
+                        bi1_3 = bi2.backward_periodic(bi1_1_t, data_length%2==1)
+                        bi2_3 = bi1.backward_periodic(bi2_1_t, data_length%2==1)
                         # Set first to denoised level 2 value
-                        haar1[0] = haar2
-                        bi1_1[0] = bi1_2
-                        bi2_1[0] = bi2_2
+                        haar5 = haar1.copy()
+                        bi1_5 = bi1_1.copy()
+                        bi2_5 = bi2_1.copy()
+                        haar5[0] = haar4
+                        bi1_5[0] = bi1_4
+                        bi2_5[0] = bi2_4
                         # Reverse depth 2
-                        haar_2 = haar.backward_periodic(haar1_t, datalength%2==1)
-                        bi1_2 = bi2.backward_periodic(bi1_1_t, datalength%2==1)
-                        bi2_2 = bi1.backward_periodic(bi2_1_t, datalength%2==1)
-                        plt.plot(haar)
-                        plt.savefig("Haar-1-Denoised-"+source+"-"+str(std_dev)+"-"+str(i)+".png")
-                        plt.plot(haar_2)
-                        plt.savefig("Haar-2-Denoised-"+source+"-"+str(std_dev)+"-"+str(i)+".png")
-                        plt.plot(bi1)
-                        plt.savefig("Bi1-1-Denoised-"+source+"-"+str(std_dev)+"-"+str(i)+".png")
-                        plt.plot(bi2)
-                        plt.savefig("Bi2-1-Denoised-"+source+"-"+str(std_dev)+"-"+str(i)+".png")
-                        plt.plot(bi1_2)
-                        plt.savefig("Bi1-2-Denoised-"+source+"-"+str(std_dev)+"-"+str(i)+".png")
-                        plt.plot(bi2_2)
-                        plt.savefig("Bi2-2-Denoised-"+source+"-"+str(std_dev)+"-"+str(i)+".png")
-                        average_psnr["haar"][source][std_dev][t][thresh_index] = i*average_psnr["haar"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, haar)/(i+1)
+                        haar_2 = haar.backward_periodic(haar5, data_length%2==1)
+                        bi1_22 = bi2.backward_periodic(bi1_5, data_length%2==1)
+                        bi2_22 = bi1.backward_periodic(bi2_5, data_length%2==1)
+                        if i==numRandom//2 and thresh_index%10==0:
+                            plt.plot(haar3)
+                            plt.savefig("Haar-1-Denoised-"+source+"-"+str(std_dev)+"-"+str(thresholds[thresh_index])+"-"+t+"-"+str(i)+".png")
+                            plt.close()
+                            plt.plot(haar_2)
+                            plt.savefig("Haar-2-Denoised-"+source+"-"+str(std_dev)+"-"+str(thresholds[thresh_index])+"-"+t+"-"+str(i)+".png")
+                            plt.close()
+                            plt.plot(bi1_3)
+                            plt.savefig("Bi1-1-Denoised-"+source+"-"+str(std_dev)+"-"+str(thresholds[thresh_index])+"-"+t+"-"+str(i)+".png")
+                            plt.close()
+                            plt.plot(bi2_3)
+                            plt.savefig("Bi2-1-Denoised-"+source+"-"+str(std_dev)+"-"+str(thresholds[thresh_index])+"-"+t+"-"+str(i)+".png")
+                            plt.close()
+                            plt.plot(bi1_22)
+                            plt.savefig("Bi1-2-Denoised-"+source+"-"+str(std_dev)+"-"+str(thresholds[thresh_index])+"-"+t+"-"+str(i)+".png")
+                            plt.close()
+                            plt.plot(bi2_22)
+                            plt.savefig("Bi2-2-Denoised-"+source+"-"+str(std_dev)+"-"+str(thresholds[thresh_index])+"-"+t+"-"+str(i)+".png")
+                            plt.close()
+                        average_psnr["haar"][source][std_dev][t][thresh_index] = i*average_psnr["haar"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, haar3)/(i+1)
                         average_psnr["haar2"][source][std_dev][t][thresh_index] = i*average_psnr["haar2"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, haar_2)/(i+1)
-                        average_psnr["bi1"][source][std_dev][t][thresh_index] = i*average_psnr["bi1"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, bi1)/(i+1)
-                        average_psnr["bi1_2"][source][std_dev][t][thresh_index] = i*average_psnr["bi1_2"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, bi1_2)/(i+1)
-                        average_psnr["bi2"][source][std_dev][t][thresh_index] = i*average_psnr["bi2"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, bi2)/(i+1)
-                        average_psnr["bi2_2"][source][std_dev][t][thresh_index] = i*average_psnr["bi2_2"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, bi2_2)/(i+1)
-            for t in threshold_type:
-                for key in average_psnr.keys():
-                    plt.plot(thresholds, average_psnr[key][source][std_dev][t])
+                        average_psnr["bi1"][source][std_dev][t][thresh_index] = i*average_psnr["bi1"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, bi1_3)/(i+1)
+                        average_psnr["bi1_2"][source][std_dev][t][thresh_index] = i*average_psnr["bi1_2"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, bi1_22)/(i+1)
+                        average_psnr["bi2"][source][std_dev][t][thresh_index] = i*average_psnr["bi2"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, bi2_3)/(i+1)
+                        average_psnr["bi2_2"][source][std_dev][t][thresh_index] = i*average_psnr["bi2_2"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, bi2_22)/(i+1)
+            for key in average_psnr.keys():
+                for t in threshold_type:
+                    plt.plot(thresholds, average_psnr[key][source][std_dev][t], label=t)
                     plt.xlabel("Threshold")
                     plt.ylabel("PSNR")
-                    plt.savefig(key+"-"+t+"-"+str(std_dev)+"-"+source+"-psnr/threshold.png")
+                plt.legend(loc="upper right")
+                plt.savefig(key+"-"+"-"+str(std_dev)+"-"+source+"-psnr-threshold.png")
+                plt.close()
 
                         
 ##        output2 = haar.forward_periodic(output[0])
