@@ -112,7 +112,7 @@ def main():
     datasources = ["Blocks", "Piece-Polynomial", "Piece-regular", "Ramp", "Doppler"]
     threshold_type = ["soft", "hard"]
     average_psnr = {"haar":{}, "haar2":{}, "bi1":{}, "bi1_2":{}, "bi2":{}, "bi2_2":{}}
-    numRandom = 1
+    numRandom = 10
     # Define wavelets
     haar = Wavelet(([1/2, 1/2], [-1/2, 1/2]), [0,0])
     bi1 = Wavelet(([-1/8, 1/4, 3/4, 1/4, -1/8], [-1/4, 1/2, -1/4]), [-2, 0])
