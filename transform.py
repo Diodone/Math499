@@ -22,7 +22,7 @@ class WaveletFilter:
             if(n%2==0):
                 output.append(2*value)
         return np.array(output)
-    def backward_periodic(self, input_array):
+    def backward_periodic(self, input_array, odd):
         output = []
         for n in range(2*len(input_array)):
             value = 0
@@ -35,7 +35,9 @@ class WaveletFilter:
                 #print(n)
                 #print(input_value)
                 value += self.array[index]*input_value
-            output.append(2*value)
+            if not odd or (odd and n%2==0):
+                output.append(2*value)
+                
         return np.array(output)
 
 class Wavelet:
@@ -52,13 +54,13 @@ class Wavelet:
         for f in self.filters:
             output.append(f.forward_periodic(input_array))
         return output
-    def backward_periodic(self, input_arrays):
+    def backward_periodic(self, input_arrays, odd):
         output = None
         for index in range(len(input_arrays)):
             if output is None:
-                output = self.filters[index].backward_periodic(input_arrays[index])
+                output = self.filters[index].backward_periodic(input_arrays[index], odd)
             else:
-                output += self.filters[index].backward_periodic(input_arrays[index])
+                output += self.filters[index].backward_periodic(input_arrays[index], odd)
         return output/2
 
 def psnr(source, approximation):
@@ -104,44 +106,120 @@ def randomNull(data, percentRemain=1):
     return out_data
 
 def main():
+    # Data length, deviation of gaussian noise, datasources, thresholding type, number of trials for each deviation
     data_length = 1024
-    std_dev = 20
+    std_devs = np.arange(0.125, 10,0.125)
+    datasources = ["Blocks", "Piece-Polynomial", "Piece-regular", "Ramp", "Doppler"]
+    threshold_type = ["soft", "hard"]
+    average_psnr = {"haar":{}, "haar2":{}, "bi1":{}, "bi1_2":{}, "bi2":{}, "bi2_2":{}}
+    numRandom = 200
     # Define wavelets
     haar = Wavelet(([1/2, 1/2], [-1/2, 1/2]), [0,0])
     bi1 = Wavelet(([-1/8, 1/4, 3/4, 1/4, -1/8], [-1/4, 1/2, -1/4]), [-2, 0])
     bi2 = Wavelet(([1/4, 1/2, 1/4], [-1/8, -1/4, 3/4, -1/4, -1/8]), [-1, -1])
-    data = pywt.data.demo_signal('piece-polynomial', data_length)
-    original_data = data.copy()
-    plt.figure()
-    plt.subplot(321)
-    plt.plot(original_data)
-    data = add_noise(data, std_dev)
-    plt.subplot(322)
-    plt.plot(data)
-    output = haar.forward_periodic(data)
-    output2 = haar.forward_periodic(output[0])
-    thresholded2= threshold(output2, calc_threshold(original_data, std_dev))
-    thresholded = threshold(output, calc_threshold(original_data, std_dev))
-    out = haar.backward_periodic(thresholded)
-    thresholded[0] = haar.backward_periodic(thresholded2)
-    out2 = haar.backward_periodic(thresholded)
-    plt.subplot(323)
-    plt.plot(out)
-    plt.subplot(324)
-    plt.plot(out2)
-    print(psnr(original_data, out))
-    print(psnr(original_data, out2))
-    output = bi1.forward_periodic(data)
-    thresholded = threshold(output, calc_threshold(original_data, std_dev))
-    out = bi2.backward_periodic(thresholded)
-    plt.subplot(325)
-    plt.plot(out)
-    output = bi2.forward_periodic(data)
-    thresholded = threshold(output, calc_threshold(original_data, std_dev))
-    out = bi1.backward_periodic(output)
-    plt.subplot(326)
-    plt.plot(out)
-    plt.show()
+    # Iterate over the datasources
+    for source in datasources:
+        for key in average_psnr.keys():
+            average_psnr[key][source] = {}
+        data = pywt.data.demo_signal(source, data_length)
+        original_data = data.copy()
+        plt.plot(original_data)
+        plt.savefig("SourceData-"+source+".png")
+        for std_dev in std_devs:
+            for key in average_psnr.keys():
+                average_psnr[key][source][std_dev] = {}
+            # Calculate a decent spread of thresholds
+            thresholds = np.linspace(0, 2*calc_threshold(original_data, std_dev))
+            for t in threshold_type:
+                for key in average_psnr.keys():
+                    average_psnr[key][source][std_dev][t] = np.zeros(thresholds.shape)
+            for i in range(numRandom):
+                added_noise=add_noise(data, std_dev)
+                plt.plot(added_noise)
+                plt.savefig("Noisy-"+source+"-"+str(std_dev)+"-"+str(i)+".png")
+                # Calculate forward transform for all wavelets, and 2 deep combinations (currently of same wavelet)
+                haar1 = haar.forward_periodic(added_noise)
+                haar2 = haar.forward_periodic(haar1[0])
+                bi1_1 = bi1.forward_periodic(added_noise)
+                bi1_2 = bi1.forward_periodic(bi1_1[0])
+                bi2_1 = bi2.forward_periodic(added_noise)
+                bi2_2 = bi2.forward_periodic(bi2_1[0])
+                # Threshold
+                for thesh_index in range(len(thresholds)):
+                    for t in threshold_type:
+                        
+                        # Technically, the transformed values is \sqrt(2)* the value received from forward. This doesn't change much as a constant multiple can continue though so long as it is kept track of, and indeed my backward takes the \sqrt(2) into account. Threshold values need to be adjusted though
+                        haar1_t = threshold(haar1, threshold/math.sqrt(2), t)
+                        haar2_t = threshold(haar2, threshold/2, t)
+                        bi1_1_t = threshold(bi1_1, threshold/math.sqrt(2), t)
+                        bi1_2_t = threshold(bi1_2, threshold/2, t)
+                        bi2_1_t = threshold(bi2_1, threshold/math.sqrt(2), t)
+                        bi2_2_t = threshold(bi2_2, threshold/2, t)
+                        # Reconstruct from the thresholded values
+                        haar2 = haar.backward_periodic(haar2_t, len(haar1[0])%2==1)
+                        bi1_2 = bi2.backward_periodic(bi1_2_t, len(bi1_1[0])%2==1)
+                        bi2_2 = bi1.backward_periodic(bi2_2_t, len(bi2_1[0])%2==1)
+                        # Reverse depth 1
+                        haar = haar.backward_periodic(haar1_t, datalength%2==1)
+                        bi1 = bi2.backward_periodic(bi1_1_t, datalength%2==1)
+                        bi2 = bi1.backward_periodic(bi2_1_t, datalength%2==1)
+                        # Set first to denoised level 2 value
+                        haar1[0] = haar2
+                        bi1_1[0] = bi1_2
+                        bi2_1[0] = bi2_2
+                        # Reverse depth 2
+                        haar_2 = haar.backward_periodic(haar1_t, datalength%2==1)
+                        bi1_2 = bi2.backward_periodic(bi1_1_t, datalength%2==1)
+                        bi2_2 = bi1.backward_periodic(bi2_1_t, datalength%2==1)
+                        plt.plot(haar)
+                        plt.savefig("Haar-1-Denoised-"+source+"-"+str(std_dev)+"-"+str(i)+".png")
+                        plt.plot(haar_2)
+                        plt.savefig("Haar-2-Denoised-"+source+"-"+str(std_dev)+"-"+str(i)+".png")
+                        plt.plot(bi1)
+                        plt.savefig("Bi1-1-Denoised-"+source+"-"+str(std_dev)+"-"+str(i)+".png")
+                        plt.plot(bi2)
+                        plt.savefig("Bi2-1-Denoised-"+source+"-"+str(std_dev)+"-"+str(i)+".png")
+                        plt.plot(bi1_2)
+                        plt.savefig("Bi1-2-Denoised-"+source+"-"+str(std_dev)+"-"+str(i)+".png")
+                        plt.plot(bi2_2)
+                        plt.savefig("Bi2-2-Denoised-"+source+"-"+str(std_dev)+"-"+str(i)+".png")
+                        average_psnr["haar"][source][std_dev][t][thresh_index] = i*average_psnr["haar"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, haar)/(i+1)
+                        average_psnr["haar2"][source][std_dev][t][thresh_index] = i*average_psnr["haar2"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, haar_2)/(i+1)
+                        average_psnr["bi1"][source][std_dev][t][thresh_index] = i*average_psnr["bi1"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, bi1)/(i+1)
+                        average_psnr["bi1_2"][source][std_dev][t][thresh_index] = i*average_psnr["bi1_2"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, bi1_2)/(i+1)
+                        average_psnr["bi2"][source][std_dev][t][thresh_index] = i*average_psnr["bi2"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, bi2)/(i+1)
+                        average_psnr["bi2_2"][source][std_dev][t][thresh_index] = i*average_psnr["bi2_2"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, bi2_2)/(i+1)
+            for t in threshold_type:
+                for key in average_psnr.keys():
+                    plt.plot(thresholds, average_psnr[key][source][std_dev][t])
+                    plt.xlabel("Threshold")
+                    plt.ylabel("PSNR")
+                    plt.savefig(key+"-"+t+"-"+str(std_dev)+"-"+source+"-psnr/threshold.png")
+
+                        
+##        output2 = haar.forward_periodic(output[0])
+##        thresholded2= threshold(output2, calc_threshold(original_data, std_dev))
+##        thresholded = threshold(output, calc_threshold(original_data, std_dev))
+##        out = haar.backward_periodic(thresholded, False)
+##        thresholded[0] = haar.backward_periodic(thresholded2, False)
+##        out2 = haar.backward_periodic(thresholded, False)
+##        plt.subplot(323)
+##        plt.plot(out)
+##        plt.subplot(324)
+##        plt.plot(out2)
+##        print(psnr(original_data, out))
+##        print(psnr(original_data, out2))
+##        output = bi1.forward_periodic(data)
+##        thresholded = threshold(output, calc_threshold(original_data, std_dev))
+##        out = bi2.backward_periodic(thresholded, False)
+##        plt.subplot(325)
+##        plt.plot(out)
+##        output = bi2.forward_periodic(data)
+##        thresholded = threshold(output, calc_threshold(original_data, std_dev))
+##        out = bi1.backward_periodic(output, False)
+##        plt.subplot(326)
+##        plt.plot(out)
+##        plt.show()
     # Load image
     #dev = 1
     #original = pywt.data.camera()
