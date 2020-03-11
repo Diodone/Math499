@@ -128,12 +128,12 @@ def main():
         plt.close()
         for std_dev in std_devs:
             for key in average_psnr.keys():
-                average_psnr[key][source][std_dev] = {}
+                average_psnr[key] = {}
             # Calculate a decent spread of thresholds
-            thresholds = np.linspace(0, 2*calc_threshold(original_data, std_dev))
+            thresholds = np.linspace(0, 5*calc_threshold(original_data, std_dev))
             for t in threshold_type:
                 for key in average_psnr.keys():
-                    average_psnr[key][source][std_dev][t] = np.zeros(thresholds.shape)
+                    average_psnr[key][t] = np.zeros(thresholds.shape)
             for i in range(numRandom):
                 added_noise=add_noise(data, std_dev)
                 plt.plot(added_noise)
@@ -195,15 +195,16 @@ def main():
                             plt.plot(bi2_22)
                             plt.savefig("Bi2-2-Denoised-"+source+"-"+str(std_dev)+"-"+str(thresholds[thresh_index])+"-"+t+"-"+str(i)+".png")
                             plt.close()
-                        average_psnr["haar"][source][std_dev][t][thresh_index] = i*average_psnr["haar"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, haar3)/(i+1)
-                        average_psnr["haar2"][source][std_dev][t][thresh_index] = i*average_psnr["haar2"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, haar_2)/(i+1)
-                        average_psnr["bi1"][source][std_dev][t][thresh_index] = i*average_psnr["bi1"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, bi1_3)/(i+1)
-                        average_psnr["bi1_2"][source][std_dev][t][thresh_index] = i*average_psnr["bi1_2"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, bi1_22)/(i+1)
-                        average_psnr["bi2"][source][std_dev][t][thresh_index] = i*average_psnr["bi2"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, bi2_3)/(i+1)
-                        average_psnr["bi2_2"][source][std_dev][t][thresh_index] = i*average_psnr["bi2_2"][source][std_dev][t][thresh_index]/(i+1) + psnr(original_data, bi2_22)/(i+1)
+                        average_psnr["haar"][t][thresh_index] = i*average_psnr["haar"][t][thresh_index]/(i+1) + psnr(original_data, haar3)/(i+1)
+                        average_psnr["haar2"][t][thresh_index] = i*average_psnr["haar2"][t][thresh_index]/(i+1) + psnr(original_data, haar_2)/(i+1)
+                        average_psnr["bi1"][t][thresh_index] = i*average_psnr["bi1"][t][thresh_index]/(i+1) + psnr(original_data, bi1_3)/(i+1)
+                        average_psnr["bi1_2"][t][thresh_index] = i*average_psnr["bi1_2"][t][thresh_index]/(i+1) + psnr(original_data, bi1_22)/(i+1)
+                        average_psnr["bi2"][t][thresh_index] = i*average_psnr["bi2"][t][thresh_index]/(i+1) + psnr(original_data, bi2_3)/(i+1)
+                        average_psnr["bi2_2"][t][thresh_index] = i*average_psnr["bi2_2"][t][thresh_index]/(i+1) + psnr(original_data, bi2_22)/(i+1)
             for key in average_psnr.keys():
                 for t in threshold_type:
-                    plt.plot(thresholds, average_psnr[key][source][std_dev][t], label=t)
+                    plt.plot(thresholds, average_psnr[key][t], label=t)
+                    np.save("average_psnr-"+key+"-"+str(std_dev)+"-"+source+"-"+t, average_psnr[key][t])
                     plt.xlabel("Threshold")
                     plt.ylabel("PSNR")
                 plt.legend(loc="upper right")
