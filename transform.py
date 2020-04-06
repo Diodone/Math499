@@ -308,7 +308,7 @@ def two_d():
                 #plt.imshow(noisy, plt.cm.gray)
                 plt.subplot(122)
                 plt.axis('off')
-                plt.imshow(f, plt.cm.gray)
+                plt.imshow(g, plt.cm.gray)
                 plt.savefig('.png')
                 plt.close()
             psnrs.append(psnr_inter)
