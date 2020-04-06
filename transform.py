@@ -124,7 +124,7 @@ def threshold(values, std, depth, data_mod=1, epsilon_mod=1, typeStr = "soft"):
     return output
 
 def hard_threshold(values, std_dev, depth, data_mod, epsilon_mod):
-    epsilon = epsilon_mod*calc_threshold(values, std_dev, depth)/math.pow(2, depth/2)
+    epsilon = epsilon_mod*calc_threshold(values, std_dev, depth, data_mod)/math.pow(2, depth/2)
     thresholded = values.copy()
     thresholded[abs(thresholded)<=epsilon] = 0
     return thresholded
@@ -134,7 +134,7 @@ def soft_threshold(values, std_dev, depth, data_mod, epsilon_mod):
     return np.sign(values) * np.maximum(np.abs(values)-epsilon, 0)
 
 def calc_threshold(data, std_dev, depth, data_mod):
-    dev_orig_approx = max(np.var(math.pow(2, data_mod*depth/2)*data)-std_dev**2, 0)
+    dev_orig_approx = max(np.var(math.pow(2, (data_mod+depth)/2)*data)-std_dev**2, 0)
     if dev_orig_approx != 0:
         return std_dev**2/math.sqrt(dev_orig_approx)
     else:
@@ -259,8 +259,8 @@ def two_d():
     std = 10
     noisy=add_noise(p, std)
     threshold_type = ["soft", "hard"]
-    data_mods = [1, 2, 0.5, 4, 0.25, -1, -2, -0.5, -4, -0.25, 8, 1/8, -8, -1/8]
-    epsilon_mods = [1, 1.5, 2, 2/3, 1/2]
+    data_mods = [-8, -6, -4,-2, -1.5,-1, -0.5, 0,0.5, 1,1.5, 2,  4, 6, 8]
+    epsilon_mods = [1/2, 2/3, 1, 1.5, 2]
     bi1 = Wavelet(([-1/8, 1/4, 3/4, 1/4, -1/8], [-1/4, 1/2, -1/4]), [-2, 0])
     bi2 = Wavelet(([1/4, 1/2, 1/4], [-1/8, -1/4, 3/4, -1/4, -1/8]), [-1, -1])
     t = bi1.forward_2d(noisy)
@@ -309,21 +309,23 @@ def two_d():
                 plt.subplot(122)
                 plt.axis('off')
                 plt.imshow(g, plt.cm.gray)
-                plt.savefig('.png')
+                plt.savefig(str(data_mod)+'_'+str(epsilon_mod)+'_'+ty+'.png')
                 plt.close()
             psnrs.append(psnr_inter)
-        array = numpy.array(psnrs)
+        array = np.array(psnrs)
         for i in range(len(array)):
             plt.plot(epsilon_mods, array[i])
             plt.xlabel("Threshold modifier")
             plt.ylabel("PSNR")
-            plt.savefig("data_"+str(datamods[i])+"_camera_"+ty+".png")
+            plt.savefig("data_"+str(data_mods[i])+"_camera_"+ty+".png")
+            plt.close()
         array = array.T
         for i in range(len(array)):
             plt.plot(data_mods, array[i])
             plt.xlabel("Data modifier (2^modifier)")
             plt.ylabel("PSNR")
-            plt.savefig("epsilon_"+str(datamods[i])+"_camera_"+ty+".png")
+            plt.savefig("epsilon_"+str(epsilon_mods[i])+"_camera_"+ty+".png")
+            plt.close()
     
 
 #main()
