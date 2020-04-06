@@ -63,7 +63,6 @@ class Wavelet:
                     array = np.expand_dims(f.forward_periodic(row), axis=0)
                 else:
                     array = np.append(array, np.expand_dims(f.forward_periodic(row), axis=0), axis=0)
-            print(array)
             for altF in self.filters:
                 newArray = None
                 for col in array.T:
@@ -113,29 +112,29 @@ def add_noise(original, std_dev):
     noise = np.random.normal(scale=std_dev, size=original.shape)
     return original+noise
 
-def threshold(values, std, depth, typeStr = "soft"):
+def threshold(values, std, depth, data_mod=1, epsilon_mod=1, typeStr = "soft"):
     output = []
     if isinstance(typeStr, str):
         if typeStr.lower() == "soft":
             for item in values:
-                output.append(soft_threshold(item, std, depth))
+                output.append(soft_threshold(item, std, depth, data_mod, epsilon_mod))
         elif typeStr.lower() == "hard":
             for item in values:
-                output.append(hard_threshold(item, std, depth))
+                output.append(hard_threshold(item, std, depth, data_mod, epsilon_mod))
     return output
 
-def hard_threshold(values, std_dev, depth):
-    epsilon = calc_threshold(values, std_dev, depth)/math.pow(2, depth/2)
+def hard_threshold(values, std_dev, depth, data_mod, epsilon_mod):
+    epsilon = epsilon_mod*calc_threshold(values, std_dev, depth)/math.pow(2, depth/2)
     thresholded = values.copy()
     thresholded[abs(thresholded)<=epsilon] = 0
     return thresholded
 
-def soft_threshold(values, std_dev, depth):
-    epsilon = calc_threshold(values, std_dev, depth)/math.pow(2, depth/2)
+def soft_threshold(values, std_dev, depth, data_mod, epsilon_mod):
+    epsilon = epsilon_mod*calc_threshold(values, std_dev, depth, data_mod)/math.pow(2, depth/2)
     return np.sign(values) * np.maximum(np.abs(values)-epsilon, 0)
 
-def calc_threshold(data, std_dev, depth):
-    dev_orig_approx = max(np.var(math.pow(2, depth/2)*data)-std_dev**2, 0)
+def calc_threshold(data, std_dev, depth, data_mod):
+    dev_orig_approx = max(np.var(math.pow(2, data_mod*depth/2)*data)-std_dev**2, 0)
     if dev_orig_approx != 0:
         return std_dev**2/math.sqrt(dev_orig_approx)
     else:
@@ -194,9 +193,9 @@ def main():
                 # Threshold
                 for t in threshold_type:
                     
-                    # Technically, the transformed values is \sqrt(2)* the value received from forward. This doesn't change much as a constant multiple can continue though so long as it is kept track of, and indeed my backward takes the \sqrt(2) into account. Threshold values need to be adjusted though
-                    haar1_t = threshold(haar1[1:], std_dev, 1, t)
-                    haar2_t = threshold(haar2[1:], std_dev, 2, t)
+                    # Technically, the transformed values is \sqrt(2)* the value received from forward. This doesn't change much as a constant multiple can continue though so long as it is kept track of, and indeed my backward takes the \sqrt(2) into account. Threshold values need to be adjusted though, hence the depth parameter
+                    haar1_t = threshold(haar1[1:], std_dev, -1, t)
+                    haar2_t = threshold(haar2[1:], std_dev, -2, t)
                     bi1_1_t = threshold(bi1_1[1:], thresholds[thresh_index]/math.sqrt(2), t)
                     bi1_2_t = threshold(bi1_2[1:], thresholds[thresh_index]/2, t)
                     bi2_1_t = threshold(bi2_1, thresholds[thresh_index]/math.sqrt(2), t)
@@ -255,56 +254,77 @@ def main():
                 plt.savefig(key+"-"+"-"+str(std_dev)+"-"+source+"-psnr-threshold.png")
                 plt.close()
 
-def test():
-    p = np.array([[2,3, 4, 6], [4,6, 7, 5], [9, 8, 4, 4]])
-    noisy=add_noise(p, 1)
+def two_d():
+    p = pywt.data.camera()
+    std = 10
+    noisy=add_noise(p, std)
+    threshold_type = ["soft", "hard"]
+    data_mods = [1, 2, 0.5, 4, 0.25, -1, -2, -0.5, -4, -0.25, 8, 1/8, -8, -1/8]
+    epsilon_mods = [1, 1.5, 2, 2/3, 1/2]
     bi1 = Wavelet(([-1/8, 1/4, 3/4, 1/4, -1/8], [-1/4, 1/2, -1/4]), [-2, 0])
     bi2 = Wavelet(([1/4, 1/2, 1/4], [-1/8, -1/4, 3/4, -1/4, -1/8]), [-1, -1])
     t = bi1.forward_2d(noisy)
-    print(t)
-    t[1:] = threshold(t[1:], 1, 2)
-    f = bi2.backward_2d(t,False, False)
-    print(f)
-##        output2 = haar.forward_periodic(output[0])
-##        thresholded2= threshold(output2, calc_threshold(original_data, std_dev))
-##        thresholded = threshold(output, calc_threshold(original_data, std_dev))
-##        out = haar.backward_periodic(thresholded, False)
-##        thresholded[0] = haar.backward_periodic(thresholded2, False)
-##        out2 = haar.backward_periodic(thresholded, False)
-##        plt.subplot(323)
-##        plt.plot(out)
-##        plt.subplot(324)
-##        plt.plot(out2)
-##        print(psnr(original_data, out))
-##        print(psnr(original_data, out2))
-##        output = bi1.forward_periodic(data)
-##        thresholded = threshold(output, calc_threshold(original_data, std_dev))
-##        out = bi2.backward_periodic(thresholded, False)
-##        plt.subplot(325)
-##        plt.plot(out)
-##        output = bi2.forward_periodic(data)
-##        thresholded = threshold(output, calc_threshold(original_data, std_dev))
-##        out = bi1.backward_periodic(output, False)
-##        plt.subplot(326)
-##        plt.plot(out)
-##        plt.show()
-    # Load image
-    #dev = 1
-    #original = pywt.data.camera()
-    # original = 
-    #noisy = add_noise(original, dev)
-    #LL, (LH, HL, HH)=pywt.dwt2(noisy, 'haar')
-    #epsilon = calc_threshold(noisy, dev)
-    #soft_LL = soft_threshold(LL, epsilon)
-    #soft_LH = soft_threshold(LH, epsilon)
-    #soft_HL = soft_threshold(HL, epsilon)
-    #soft_HH = soft_threshold(HH, epsilon)
-    #approx = pywt.idwt2((soft_LL,(soft_LH, soft_HL, soft_HH)), 'haar')
-    #plt.imshow(original, plt.cm.gray)
-    #print( psnr(original, approx))
-    #plt.show()
-    #plt.imshow(approx, plt.cm.gray)
-    #plt.show()
+    t2 = bi1.forward_2d(t[0])
+    t3 = bi1.forward_2d(t2[0])
+    t4 = bi1.forward_2d(t3[0])
+    t5 = bi1.forward_2d(t4[0])
+    t6 = bi1.forward_2d(t5[0])
+    t7 = bi1.forward_2d(t6[0])
+    for ty in threshold_type:
+        psnrs = []
+        for data_mod in data_mods:
+            psnr_inter = []
+            for epsilon_mod in epsilon_mods:
+                f= t.copy()
+                f2 = t2.copy()
+                f3 = t3.copy()
+                f4 = t4.copy()
+                f5 = t5.copy()
+                f6 = t6.copy()
+                f7 = t7.copy()
+                # Threshold
+                f[1:] = threshold(f[1:], std, 2, data_mod, epsilon_mod, ty)
+                f2[1:] = threshold(f2[1:], std, 4, data_mod, epsilon_mod, ty)
+                f3[1:] = threshold(f3[1:], std, 6, data_mod, epsilon_mod, ty)
+                f4[1:] = threshold(f4[1:], std, 8, data_mod, epsilon_mod, ty)
+                f5[1:] = threshold(f5[1:], std, 10, data_mod, epsilon_mod, ty)
+                f6[1:] = threshold(f6[1:], std, 12, data_mod, epsilon_mod, ty)
+                f7[1:] = threshold(f7[1:], std, 14, data_mod, epsilon_mod, ty)
+                # Reconstruct
+                f6[0] = bi2.backward_2d(f7,False, False)
+                f5[0] = bi2.backward_2d(f6,False, False)
+                f4[0] = bi2.backward_2d(f5,False, False)
+                f3[0] = bi2.backward_2d(f4,False, False)
+                f2[0] = bi2.backward_2d(f3,False, False)
+                f[0] = bi2.backward_2d(f2,False, False)
+                g = bi2.backward_2d(f,False, False)
+                # Save psnr
+                psnr_inter.append(psnr(p, g))
+                plt.subplot(121)
+                plt.axis('off')
+                plt.imshow(p, plt.cm.gray)
+                #plt.subplot(122)
+                #plt.axis('off')
+                #plt.imshow(noisy, plt.cm.gray)
+                plt.subplot(122)
+                plt.axis('off')
+                plt.imshow(f, plt.cm.gray)
+                plt.savefig('.png')
+                plt.close()
+            psnrs.append(psnr_inter)
+        array = numpy.array(psnrs)
+        for i in range(len(array)):
+            plt.plot(epsilon_mods, array[i])
+            plt.xlabel("Threshold modifier")
+            plt.ylabel("PSNR")
+            plt.savefig("data_"+str(datamods[i])+"_camera_"+ty+".png")
+        array = array.T
+        for i in range(len(array)):
+            plt.plot(data_mods, array[i])
+            plt.xlabel("Data modifier (2^modifier)")
+            plt.ylabel("PSNR")
+            plt.savefig("epsilon_"+str(datamods[i])+"_camera_"+ty+".png")
+    
 
 #main()
-test()
+two_d()
