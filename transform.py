@@ -1,7 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import math
-
+from PIL import Image
+from mpl_toolkits.mplot3d import Axes3D
 
 import pywt.data
 
@@ -112,29 +113,29 @@ def add_noise(original, std_dev):
     noise = np.random.normal(scale=std_dev, size=original.shape)
     return original+noise
 
-def threshold(values, std, depth, data_mod=1, epsilon_mod=1, typeStr = "soft"):
+def threshold(values, std, depth, data_mod=1, data_add=0, epsilon_mod=1, typeStr = "soft"):
     output = []
     if isinstance(typeStr, str):
         if typeStr.lower() == "soft":
             for item in values:
-                output.append(soft_threshold(item, std, depth, data_mod, epsilon_mod))
+                output.append(soft_threshold(item, std, depth, data_mod, data_add, epsilon_mod))
         elif typeStr.lower() == "hard":
             for item in values:
-                output.append(hard_threshold(item, std, depth, data_mod, epsilon_mod))
+                output.append(hard_threshold(item, std, depth, data_mod, data_add, epsilon_mod))
     return output
 
-def hard_threshold(values, std_dev, depth, data_mod, epsilon_mod):
-    epsilon = epsilon_mod*calc_threshold(values, std_dev, depth, data_mod)/math.pow(2, depth/2)
+def hard_threshold(values, std_dev, depth, data_mod, data_add, epsilon_mod):
+    epsilon = epsilon_mod*calc_threshold(values, std_dev, depth, data_mod, data_add)/math.pow(2, depth/2)
     thresholded = values.copy()
     thresholded[abs(thresholded)<=epsilon] = 0
     return thresholded
 
-def soft_threshold(values, std_dev, depth, data_mod, epsilon_mod):
-    epsilon = epsilon_mod*calc_threshold(values, std_dev, depth, data_mod)/math.pow(2, depth/2)
+def soft_threshold(values, std_dev, depth, data_mod, data_add, epsilon_mod):
+    epsilon = epsilon_mod*calc_threshold(values, std_dev, depth, data_mod, data_add)/math.pow(2, depth/2)
     return np.sign(values) * np.maximum(np.abs(values)-epsilon, 0)
 
-def calc_threshold(data, std_dev, depth, data_mod):
-    dev_orig_approx = max(np.var(math.pow(2, (data_mod+depth)/2)*data)-std_dev**2, 0)
+def calc_threshold(data, std_dev, depth, data_mod, data_add):
+    dev_orig_approx = max(np.var(math.pow(2, (data_add+data_mod*depth)/2)*data)-std_dev**2, 0)
     if dev_orig_approx != 0:
         return std_dev**2/math.sqrt(dev_orig_approx)
     else:
@@ -255,12 +256,21 @@ def main():
                 plt.close()
 
 def two_d():
-    p = pywt.data.camera()
-    std = 10
+    #p = pywt.data.camera()
+    p = np.asarray(Image.open('lena.tif'))
+    std = 5
     noisy=add_noise(p, std)
+    plt.axis('off')
+    plt.imshow(noisy, plt.cm.gray)
+    plt.savefig("Noisy.png")
+    plt.close()
+    plt.axis('off')
+    plt.imshow(p, plt.cm.gray)
+    plt.savefig("original.png")
     threshold_type = ["soft", "hard"]
-    data_mods = [-8, -6, -4,-2, -1.5,-1, -0.5, 0,0.5, 1,1.5, 2,  4, 6, 8]
-    epsilon_mods = [1/2, 2/3, 1, 1.5, 2]
+    data_mult = [-2, -1.5,-1, -0.5, 0,0.5, 1,1.5, 2]
+    data_adds = [-4, -3, -2, -1, 0, 1, 2, 3, 4]
+    epsilon_mods = [1]
     bi1 = Wavelet(([-1/8, 1/4, 3/4, 1/4, -1/8], [-1/4, 1/2, -1/4]), [-2, 0])
     bi2 = Wavelet(([1/4, 1/2, 1/4], [-1/8, -1/4, 3/4, -1/4, -1/8]), [-1, -1])
     t = bi1.forward_2d(noisy)
@@ -272,61 +282,89 @@ def two_d():
     t7 = bi1.forward_2d(t6[0])
     for ty in threshold_type:
         psnrs = []
-        for data_mod in data_mods:
+        for data_mod in data_mult:
             psnr_inter = []
-            for epsilon_mod in epsilon_mods:
-                f= t.copy()
-                f2 = t2.copy()
-                f3 = t3.copy()
-                f4 = t4.copy()
-                f5 = t5.copy()
-                f6 = t6.copy()
-                f7 = t7.copy()
-                # Threshold
-                f[1:] = threshold(f[1:], std, 2, data_mod, epsilon_mod, ty)
-                f2[1:] = threshold(f2[1:], std, 4, data_mod, epsilon_mod, ty)
-                f3[1:] = threshold(f3[1:], std, 6, data_mod, epsilon_mod, ty)
-                f4[1:] = threshold(f4[1:], std, 8, data_mod, epsilon_mod, ty)
-                f5[1:] = threshold(f5[1:], std, 10, data_mod, epsilon_mod, ty)
-                f6[1:] = threshold(f6[1:], std, 12, data_mod, epsilon_mod, ty)
-                f7[1:] = threshold(f7[1:], std, 14, data_mod, epsilon_mod, ty)
-                # Reconstruct
-                f6[0] = bi2.backward_2d(f7,False, False)
-                f5[0] = bi2.backward_2d(f6,False, False)
-                f4[0] = bi2.backward_2d(f5,False, False)
-                f3[0] = bi2.backward_2d(f4,False, False)
-                f2[0] = bi2.backward_2d(f3,False, False)
-                f[0] = bi2.backward_2d(f2,False, False)
-                g = bi2.backward_2d(f,False, False)
-                # Save psnr
-                psnr_inter.append(psnr(p, g))
-                plt.subplot(121)
-                plt.axis('off')
-                plt.imshow(p, plt.cm.gray)
-                #plt.subplot(122)
-                #plt.axis('off')
-                #plt.imshow(noisy, plt.cm.gray)
-                plt.subplot(122)
-                plt.axis('off')
-                plt.imshow(g, plt.cm.gray)
-                plt.savefig(str(data_mod)+'_'+str(epsilon_mod)+'_'+ty+'.png')
-                plt.close()
+            for data_add in data_adds:
+                psnr_interior = []
+                for epsilon_mod in epsilon_mods:
+                    f= t.copy()
+                    f2 = t2.copy()
+                    f3 = t3.copy()
+                    f4 = t4.copy()
+                    f5 = t5.copy()
+                    f6 = t6.copy()
+                    f7 = t7.copy()
+                    # Threshold
+                    f[1:] = threshold(f[1:], std, 2, data_mod, data_add, epsilon_mod, ty)
+                    f2[1:] = threshold(f2[1:], std, 4, data_mod, data_add, epsilon_mod, ty)
+                    f3[1:] = threshold(f3[1:], std, 6, data_mod, data_add, epsilon_mod, ty)
+                    f4[1:] = threshold(f4[1:], std, 8, data_mod, data_add,epsilon_mod, ty)
+                    f5[1:] = threshold(f5[1:], std, 10, data_mod, data_add, epsilon_mod, ty)
+                    f6[1:] = threshold(f6[1:], std, 12, data_mod, data_add, epsilon_mod, ty)
+                    f7[1:] = threshold(f7[1:], std, 14, data_mod, data_add, epsilon_mod, ty)
+                    # Reconstruct
+                    f6[0] = bi2.backward_2d(f7,False, False)
+                    f5[0] = bi2.backward_2d(f6,False, False)
+                    f4[0] = bi2.backward_2d(f5,False, False)
+                    f3[0] = bi2.backward_2d(f4,False, False)
+                    f2[0] = bi2.backward_2d(f3,False, False)
+                    f[0] = bi2.backward_2d(f2,False, False)
+                    g = bi2.backward_2d(f,False, False)
+                    # Save psnr
+                    psnr_interior.append(psnr(p, g))
+                    # Plot
+                    plt.axis('off')
+                    plt.imshow(g, plt.cm.gray)
+                    plt.savefig(str(data_mod)+'_'+str(data_add)+"_"+str(epsilon_mod)+'_'+ty+'.png')
+                    plt.close()
+                psnr_inter.append(psnr_interior)
             psnrs.append(psnr_inter)
         array = np.array(psnrs)
-        for i in range(len(array)):
-            plt.plot(epsilon_mods, array[i])
-            plt.xlabel("Threshold modifier")
-            plt.ylabel("PSNR")
-            plt.savefig("data_"+str(data_mods[i])+"_camera_"+ty+".png")
-            plt.close()
-        array = array.T
-        for i in range(len(array)):
-            plt.plot(data_mods, array[i])
-            plt.xlabel("Data modifier (2^modifier)")
-            plt.ylabel("PSNR")
-            plt.savefig("epsilon_"+str(epsilon_mods[i])+"_camera_"+ty+".png")
-            plt.close()
+        np.save("average-psnr-"+ty, array)
+def load_file():
+    array_hard = np.load("average-psnr-hard.npy")
+    array_soft = np.load("average-psnr-soft.npy")
+    data_mult = [-2, -1.5,-1, -0.5, 0,0.5, 1,1.5, 2]
+    data_adds = [-4, -3, -2, -1, 0, 1, 2, 3, 4]
+    epsilon_mods = [1]
+    best_hard = np.unravel_index(np.argmax(array_hard), array_hard.shape)
+    best_hard_mult = data_mult[best_hard[0]]
+    best_hard_add = data_adds[best_hard[1]]
+    best_hard_epsilon = epsilon_mods[best_hard[2]]
+    best_soft= np.unravel_index(np.argmax(array_soft), array_soft.shape)
+    best_soft_mult = data_mult[best_soft[0]]
+    best_soft_add = data_adds[best_soft[1]]
+    best_soft_epsilon = epsilon_mods[best_soft[2]]
+    print("Max psnr for hard was "+str(np.max(array_hard))+" at data multiplier="+str(best_hard_mult)+", add="+str(best_hard_add)+", epsilon_mult="+str(best_hard_epsilon))
+    print("Max psnr for soft was "+str(np.max(array_soft))+" at data multiplier="+str(best_soft_mult)+", add="+str(best_soft_add)+", epsilon_mult="+str(best_soft_epsilon))
+    # Fixed epsilon graphs
+    X, Y = np.meshgrid(data_mult, data_adds)
+    for i in range(len(epsilon_mods)):
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.scatter(X, Y, np.squeeze(array_soft[:,:,i]), label="soft")
+        ax.scatter(X, Y, np.squeeze(array_hard[:,:,i]), c="red", label="hard")
+        ax.set_xlabel("Data multiplier based on depth")
+        ax.set_ylabel("Static data multiplier")
+        ax.set_zlabel("PSNR")
+        plt.legend()
+        plt.savefig("graph_epsilon_"+str(epsilon_mods[i])+".png")
+
+##        for i in range(len(array)):
+##            plt.plot(epsilon_mods, array[i])
+##            plt.xlabel("Threshold modifier")
+##            plt.ylabel("PSNR")
+##            plt.savefig("data_"+str(data_mods[i])+"_camera_"+ty+".png")
+##            plt.close()
+##        array = array.T
+##        for i in range(len(array)):
+##            plt.plot(data_mods, array[i])
+##            plt.xlabel("Data modifier (2^modifier)")
+##            plt.ylabel("PSNR")
+##            plt.savefig("epsilon_"+str(epsilon_mods[i])+"_camera_"+ty+".png")
+##            plt.close()
     
 
 #main()
 two_d()
+load_file()
