@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import math
+import imageio
 from PIL import Image
 from mpl_toolkits.mplot3d import Axes3D
 
@@ -254,19 +255,30 @@ def main():
                 plt.legend(loc="upper right")
                 plt.savefig(key+"-"+"-"+str(std_dev)+"-"+source+"-psnr-threshold.png")
                 plt.close()
-
+def temp():
+    p = np.asarray(Image.open('./peppersdev_10/Noisy.png'))
+    bi1 = Wavelet(([-1/8, 1/4, 3/4, 1/4, -1/8], [-1/4, 1/2, -1/4]), [-2, 0])
+    bi2 = Wavelet(([1/4, 1/2, 1/4], [-1/8, -1/4, 3/4, -1/4, -1/8]), [-1, -1])
+    t = bi1.forward_2d(p)
+    print(t[0].shape)
+    print(np.concatenate((t[0]/4, t[1]/2), axis=0).shape)
+    print(np.concatenate((t[2]/2, t[3])).shape)
+    imageio.imwrite("temp.png", np.concatenate((np.concatenate((t[0]/4, t[1]/2+128)), np.concatenate((t[2]/2+128, t[3]+128))), axis=1))
+    
 def two_d():
     #p = pywt.data.camera()
-    p = np.asarray(Image.open('lena.tif'))
-    std = 5
+    p = np.asarray(Image.open('peppers.tif'))
+    std = 20
     noisy=add_noise(p, std)
-    plt.axis('off')
-    plt.imshow(noisy, plt.cm.gray)
-    plt.savefig("Noisy.png")
-    plt.close()
-    plt.axis('off')
-    plt.imshow(p, plt.cm.gray)
-    plt.savefig("original.png")
+    #plt.axis('off')
+    #plt.imshow(noisy, plt.cm.gray)
+    #plt.savefig("Noisy.png")
+    #plt.close()
+    imageio.imwrite("Noisy.png", noisy)
+    #plt.axis('off')
+    #plt.imshow(p, plt.cm.gray)
+    #plt.savefig("original.png")
+    imageio.imwrite("original.png", p)
     threshold_type = ["soft", "hard"]
     data_mult = [-2, -1.5,-1, -0.5, 0,0.5, 1,1.5, 2]
     data_adds = [-4, -3, -2, -1, 0, 1, 2, 3, 4]
@@ -312,11 +324,12 @@ def two_d():
                     g = bi2.backward_2d(f,False, False)
                     # Save psnr
                     psnr_interior.append(psnr(p, g))
-                    # Plot
-                    plt.axis('off')
-                    plt.imshow(g, plt.cm.gray)
-                    plt.savefig(str(data_mod)+'_'+str(data_add)+"_"+str(epsilon_mod)+'_'+ty+'.png')
-                    plt.close()
+                    # Save image
+                    imageio.imwrite(str(data_mod)+'_'+str(data_add)+"_"+str(epsilon_mod)+'_'+ty+'.png', g)
+                    #plt.axis('off')
+                    #plt.imshow(g, plt.cm.gray)
+                    #plt.savefig()
+                    #plt.close()
                 psnr_inter.append(psnr_interior)
             psnrs.append(psnr_inter)
         array = np.array(psnrs)
@@ -366,5 +379,6 @@ def load_file():
     
 
 #main()
+#temp()
 two_d()
 load_file()
